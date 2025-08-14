@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飛天豬大冒險</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div id="score-display">分數: 0</div>
+        <canvas id="gameCanvas" width="360" height="640"></canvas>
+        <div id="start-screen" class="overlay">
+            <h1>飛天豬大冒險</h1>
+            <p>點擊畫面開始遊戲</p>
+        </div>
+        <div id="game-over-screen" class="overlay" style="display: none;">
+            <h1>遊戲結束</h1>
+            <p>你的分數: <span id="final-score">0</span></p>
+            <p class="small-text">點擊畫面重新開始</p>
+        </div>
+    </div>
+    
+    <div id="game-info-container">
+        <div class="info-section">
+            <h2>遊戲玩法</h2>
+            <p>點擊畫面讓飛天豬向上飛，穿越木柵欄來獲得分數！</p>
+            <ul>
+                <li><img src="img/pig.png" class="icon"> <b>飛天豬</b>：點擊一次，飛一次！</li>
+                <li><img src="img/fence-top.png" class="icon"> <b>木柵欄</b>：飛得越高，越過越多！</li>
+            </ul>
+            <p>連續點擊保持飛行，但要小心別撞到柵欄或地面！</p>
+        </div>
+        <div class="info-section">
+            <h2>在地小知識：大安農會的飛天豬</h2>
+            <p>
+                「飛天豬」是台中市大安區肉品市場的吉祥物，象徵著大安區生產的豬肉品質優良、安全、安心。透過嚴格的產銷履歷與品質控管，大安農會的豬肉產品遠近馳名，就像這隻能在天空中自由翱翔的豬一樣，代表著不受拘束的頂級品質！
+            </p>
+        </div>
+    </div>
+
+    <div id="leaderboard-container">
+        <h2>🏆 榮譽排行榜 🏆</h2>
+        <ol id="leaderboard-list">
+            </ol>
+    </div>
+    <audio id="flap-sound" src="audio/flap.mp3" preload="auto"></audio>
+    <audio id="score-sound" src="audio/score.mp3" preload="auto"></audio>
+    <audio id="bgm-sound" src="audio/music.mp3" preload="auto" loop></audio>
+    <audio id="wind-sound" src="audio/wind.mp3" preload="auto" loop></audio>
+
+    <script type="module" src="game.js"></script>
+</body>
+</html>

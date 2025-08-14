@@ -1,0 +1,166 @@
+/* 基本設定 */
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #f0f0f0;
+    display: flex;
+    flex-direction: column; /* 新增：讓子元素垂直排列 */
+    align-items: center; /* 維持水平置中 */
+    min-height: 100vh; /* 修改：確保內容超出一頁時可以滾動 */
+    padding: 20px 0; /* 新增：給上下一些間距 */
+    box-sizing: border-box; /* 新增：讓 padding 不會影響總寬高計算 */
+    color: #333;
+}
+
+/* 遊戲主容器 */
+.game-container {
+    position: relative;
+    width: 360px;
+    height: 640px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+/* 遊戲畫布 */
+#gameCanvas {
+    display: block;
+    background-color: #87CEEB; /* 預設天空藍 */
+}
+
+/* 分數顯示 */
+#score-display {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2em;
+    font-weight: bold;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    z-index: 10;
+}
+
+/* 覆蓋畫面 (開始與結束) */
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    z-index: 20;
+}
+
+.overlay h1 {
+    font-size: 3em;
+    margin-bottom: 0.2em;
+    text-shadow: 3px 3px 6px rgba(0,0,0,0.7);
+}
+
+.overlay p {
+    font-size: 1.2em;
+}
+
+.overlay .small-text {
+    margin-top: 20px;
+    font-size: 0.9em;
+}
+
+/* style.css (請將以下內容附加在檔案末尾) */
+
+/* 遊戲介紹與排行榜區塊容器 */
+#game-info-container, #leaderboard-container {
+    margin: 20px auto; /* 水平置中 */
+    width: 90%;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    background-color: rgba(255, 255, 255, 0.7);
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #a1887f;
+}
+
+.info-section {
+    background-color: #fdfaf5;
+    padding: 15px 20px;
+    border-radius: 8px;
+    border: 1px solid #d7ccc8;
+    text-align: left;
+}
+
+.info-section h2, #leaderboard-container h2 {
+    color: #5d4037;
+    border-bottom: 2px solid #a1887f;
+    padding-bottom: 5px;
+    margin-top: 0;
+    text-align: center;
+}
+
+.info-section p, .info-section li {
+    line-height: 1.7;
+    color: #4e342e;
+}
+
+.info-section ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.info-section li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.icon {
+    width: 30px;
+    height: 30px;
+    margin-right: 15px;
+    object-fit: contain;
+}
+
+/* 排行榜列表樣式 */
+#leaderboard-list {
+    list-style-type: none;
+    padding-left: 0;
+    text-align: left;
+    font-size: 1.1rem;
+}
+
+#leaderboard-list li {
+    display: grid;
+    grid-template-columns: 30px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 5px;
+    border-bottom: 1px dashed #d7ccc8;
+}
+#leaderboard-list li:last-child {
+    border-bottom: none;
+}
+
+#leaderboard-list .rank {
+    font-weight: bold;
+    color: #795548;
+}
+
+#leaderboard-list .name {
+    font-weight: bold;
+    color: #3e2723;
+    /* 防止名字過長而換行 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#leaderboard-list .score {
+    font-weight: bold;
+    color: #bf360c;
+}
