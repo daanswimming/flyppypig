@@ -32,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const gameOverScreen = document.getElementById('game-over-screen');
     const finalScoreDisplay = document.getElementById('final-score');
     const leaderboardList = document.getElementById('leaderboard-list');
+    const leaderboardContainer = document.getElementById('leaderboard-container'); // 新增
+    const leaderboardMessage = document.getElementById('leaderboard-message'); // 新增
 
     // --- 音效元素取得 ---
     const flapSound = document.getElementById('flap-sound');
@@ -68,6 +70,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_WIND_VOLUME = 0.8;
     const SPEED_FOR_MAX_WIND_VOLUME = 5;
     const FLAP_SOUND_COOLDOWN = 100;
+
+    // ===== 新增功能開關 =====
+    const ENABLE_LEADERBOARD = true;      // 總開關：true = 開啟排行榜, false = 關閉
+    const LEADERBOARD_SCORE_THRESHOLD = 5; // 分數門檻：超過這個分數才會觸發排行榜
 
     // --- 遊戲狀態變數 ---
     let pig, fences, score, frame, gameState;
@@ -107,20 +113,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- 特效物件 & 音效 & 背景管理函式 (沿用整合後的版本) ---
-    function createScoreEffect(x, y) { /* ... 邏輯不變 ... */ 
+    function createScoreEffect(x, y) {
         const numEffects = Math.floor(Math.random() * 5) + 5;
         for (let i = 0; i < numEffects; i++) {
             const angle = Math.random() * 2 * Math.PI, speed = Math.random() * 2 + 1, size = Math.random() * 5 + 3, shape = effectShapes[Math.floor(Math.random() * effectShapes.length)];
             activeScoreEffects.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2, size, shape, alpha: 1, frame: 0 });
         }
     }
-    function updateScoreEffects() { /* ... 邏輯不變 ... */ 
+    function updateScoreEffects() {
         for (let i = activeScoreEffects.length - 1; i >= 0; i--) {
             const effect = activeScoreEffects[i]; effect.x += effect.vx; effect.y += effect.vy; effect.vy += GRAVITY * 0.4; effect.alpha = 1 - (effect.frame / SCORE_EFFECT_DURATION); effect.frame++;
             if (effect.alpha <= 0) { activeScoreEffects.splice(i, 1); }
         }
     }
-    function drawScoreEffects() { /* ... 繪製邏輯不變 ... */ 
+    function drawScoreEffects() {
         activeScoreEffects.forEach(effect => {
             ctx.save(); ctx.globalAlpha = effect.alpha; ctx.fillStyle = 'gold'; ctx.beginPath();
             switch (effect.shape) {
@@ -131,29 +137,29 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fill(); ctx.restore();
         });
     }
-    function startMusic() { /* ... 邏輯不變 ... */ 
+    function startMusic() {
         if (!musicStarted) {
             if (bgmSound) bgmSound.play().catch(e => console.error("BGM error:", e));
             if (windSound) { windSound.volume = INITIAL_WIND_VOLUME; windSound.play().catch(e => console.error("Wind sound error:", e)); }
             musicStarted = true;
         }
     }
-    function stopAllSounds() { /* ... 邏輯不變 ... */ 
+    function stopAllSounds() {
         if(bgmSound) { bgmSound.pause(); bgmSound.currentTime = 0; }
         if(windSound) { windSound.pause(); windSound.currentTime = 0; }
         musicStarted = false; 
     }
-    function updateWindVolume() { /* ... 邏輯不變 ... */ 
+    function updateWindVolume() {
         if (!windSound || !musicStarted) return;
         const speedRange = SPEED_FOR_MAX_WIND_VOLUME - BASE_GAME_SPEED; const currentProgress = Math.max(0, currentGameSpeed - BASE_GAME_SPEED);
         const volumeProgress = Math.min(1, currentProgress / speedRange); const newVolume = INITIAL_WIND_VOLUME + (MAX_WIND_VOLUME - INITIAL_WIND_VOLUME) * volumeProgress;
         windSound.volume = Math.min(newVolume, MAX_WIND_VOLUME);
     }
-    function startBackgroundFade() { /* ... 邏輯不變 ... */ 
+    function startBackgroundFade() {
         if (isFading || backgrounds.length <= 1) return;
         isFading = true; fadeProgress = 0; nextBgIndex = (currentBgIndex + 1) % backgrounds.length;
     }
-    function updateBackground() { /* ... 邏輯不變 ... */ 
+    function updateBackground() {
         backgroundOffsetX -= currentGameSpeed * backgroundScrollSpeedFactor;
         if (isFading) { fadeProgress += 0.01; if (fadeProgress >= 1) { fadeProgress = 0; isFading = false; currentBgIndex = nextBgIndex; } }
         const currentBg = backgrounds[currentBgIndex];
@@ -161,77 +167,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // =======================================================================
-    // *** 核心整合：Firebase 排行榜函式實作 ***
-    // =======================================================================
-    // =======================================================================
-// *** 核心修正：Firebase 排行榜儲存函式 ***
-// =======================================================================
+    // ===== 核心修改：排行榜相關函式 =====
     async function saveScoreToLeaderboard(currentScore) {
-        if (currentScore <= 0) return; // 分數為 0 不儲存
+        if (!ENABLE_LEADERBOARD) return; // 檢查總開關
+        if (currentScore <= 0) return;
 
-        const playerName = prompt("遊戲結束！請輸入你的名字來儲存分數：", "飛天小豬");
-        
-        // 檢查玩家是否輸入了名字，或是直接按了取消
-        if (playerName && playerName.trim() !== "") {
-            try {
-                // *** 關鍵修正點 ***
-                // 使用 addDoc() 來新增一筆全新的紀錄。
-                // Firestore 會自動為這筆紀錄產生一個獨一無二的 ID。
-                // 這就確保了即使玩家同名，每一筆分數都是獨立的紀錄，絕對不會互相覆蓋。
-                await addDoc(leaderboardCol, {
-                    name: playerName.trim(),
-                    score: currentScore,
-                    createdAt: new Date() // 記錄時間以便未來管理
-                });
+        try {
+            const q = query(leaderboardCol, orderBy("score", "desc"), limit(10));
+            const querySnapshot = await getDocs(q);
+            const leaderboardDocs = querySnapshot.docs;
 
-                console.log("分數已成功儲存！");
-                await fetchLeaderboard(); // 儲存後立即更新排行榜以顯示最新結果
-                
-            } catch (error) {
-                console.error("儲存分數時發生錯誤:", error);
-                alert("抱歉，儲存分數失敗，請檢查網路連線或聯繫管理員。");
+            let shouldPromptForName = false;
+            // 情況一：排行榜還沒滿10人
+            if (leaderboardDocs.length < 10) {
+                shouldPromptForName = true;
+            } 
+            // 情況二：排行榜已滿10人，檢查分數是否高於最低分
+            else {
+                const lowestScoreOnBoard = leaderboardDocs[leaderboardDocs.length - 1].data().score;
+                if (currentScore > lowestScoreOnBoard) {
+                    shouldPromptForName = true;
+                }
             }
+            
+            if (shouldPromptForName) {
+                const playerName = prompt("恭喜上榜！請輸入你的名字：", "飛天小豬");
+                if (playerName && playerName.trim() !== "") {
+                    // 使用 addDoc 新增獨立紀錄，避免同名覆蓋
+                    await addDoc(leaderboardCol, {
+                        name: playerName.trim().substring(0, 10),
+                        score: currentScore,
+                        createdAt: new Date()
+                    });
+                    console.log("分數已成功儲存！");
+                    await fetchLeaderboard(); // 儲存後立即更新排行榜
+                }
+            } else {
+                 console.log(`分數 ${currentScore} 未達上榜標準。`);
+            }
+        } catch (error) {
+            console.error("儲存分數時發生錯誤:", error);
+            alert("抱歉，儲存分數失敗，請檢查網路連線。");
         }
     }
 
     async function fetchLeaderboard() {
+        if (!ENABLE_LEADERBOARD) { // 檢查總開關
+            leaderboardContainer.style.display = 'none';
+            return;
+        }
         if (!leaderboardList) return;
-        leaderboardList.innerHTML = '<li>讀取中...</li>'; // 提示用戶正在讀取
+        leaderboardList.innerHTML = '<li>讀取中...</li>';
 
         try {
-            // 建立查詢：按分數(score)降序排列，只取前10名
             const q = query(leaderboardCol, orderBy("score", "desc"), limit(10));
             const querySnapshot = await getDocs(q);
 
-            leaderboardList.innerHTML = ''; // 清空舊列表
+            leaderboardList.innerHTML = '';
             if (querySnapshot.empty) {
                 leaderboardList.innerHTML = '<li>目前尚無紀錄</li>';
                 return;
             }
-
             let rank = 1;
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
                 const listItem = document.createElement('li');
-                
-                // 創建排名、名稱和分數的 span 元素以便套用 CSS
-                const rankSpan = document.createElement('span');
-                rankSpan.className = 'rank';
-                rankSpan.textContent = `${rank}`;
-                
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'name';
-                nameSpan.textContent = data.name;
-
-                const scoreSpan = document.createElement('span');
-                scoreSpan.className = 'score';
-                scoreSpan.textContent = data.score;
-                
-                listItem.appendChild(rankSpan);
-                listItem.appendChild(nameSpan);
-                listItem.appendChild(scoreSpan);
-
+                listItem.innerHTML = `<span class="rank">${rank}.</span><span class="name">${data.name}</span><span class="score">${data.score}</span>`;
                 leaderboardList.appendChild(listItem);
                 rank++;
             });
@@ -243,12 +244,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- 核心遊戲邏輯 (移植自穩定版) ---
-    function resetGame() { /* ... 邏輯不變，重置所有狀態 ... */ 
+    function resetGame() {
         pig.y = canvas.height / 2; pig.velocity = 0; pig.rotation = 0;
         fences = []; score = 0; frame = 0; currentGameSpeed = BASE_GAME_SPEED;
         hasSavedScore = false; activeScoreEffects = []; pigTiltFrame = 0;
         canPlayFlapSound = true; isFading = false; currentBgIndex = 0;
         fadeProgress = 0; backgroundOffsetX = 0; stopAllSounds();
+        
+        // ===== 核心修改：重設時隱藏/清理 UI =====
+        if (leaderboardContainer) leaderboardContainer.style.display = 'none';
+        if (leaderboardMessage) leaderboardMessage.textContent = '';
         
         let nextFenceX = canvas.width;
         for (let i = 0; i < 3; i++) {
@@ -259,12 +264,12 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState = 'start'; updateUI();
     }
     
-    function createFence(xPos) { /* ... 邏輯不變 ... */ 
+    function createFence(xPos) {
         const gapY = (Math.random() * (canvas.height - BASE_FENCE_GAP - 200)) + 100;
         fences.push({ x: xPos, y: gapY, width: BASE_FENCE_WIDTH, gap: BASE_FENCE_GAP, passed: false });
     }
 
-    function updateFences() { // *** 核心修復：使用穩定版的邏輯 ***
+    function updateFences() {
         if (fences.length > 0 && fences[0].x + fences[0].width < 0) {
             fences.shift();
             const lastFence = fences[fences.length - 1];
@@ -282,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function checkCollisions() { // *** 核心修復：使用穩定版的邏輯 ***
+    function checkCollisions() {
         if (pig.y + pig.height > canvas.height) return true;
         for (const fence of fences) {
             if (pig.x < fence.x + fence.width && pig.x + pig.width > fence.x && (pig.y < fence.y || pig.y + pig.height > fence.y + fence.gap)) {
@@ -292,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
     }
 
-    function draw() { // *** 核心修復：使用穩定版的邏輯 ***
+    function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const drawScrollingBackground = (index, alpha) => {
             ctx.save(); ctx.globalAlpha = alpha; const bg = backgrounds[index];
@@ -318,16 +323,28 @@ document.addEventListener('DOMContentLoaded', () => {
         pig.draw(); drawScoreEffects();
     }
     
+    // ===== 核心修改：遊戲結束邏輯 =====
     function updateUI() {
         startScreen.style.display = gameState === 'start' ? 'flex' : 'none';
         gameOverScreen.style.display = gameState === 'gameOver' ? 'flex' : 'none';
         scoreDisplay.style.display = gameState === 'playing' ? 'block' : 'none';
         if(gameState === 'playing') { scoreDisplay.textContent = `分數: ${score}`; }
+        
         if (gameState === 'gameOver') {
             finalScoreDisplay.textContent = score;
-            // *** 核心整合：在遊戲結束時觸發儲存分數 ***
             if (!hasSavedScore) {
-                saveScoreToLeaderboard(score);
+                // 檢查總開關是否開啟
+                if (ENABLE_LEADERBOARD) {
+                    // 檢查分數是否達到門檻
+                    if (score >= LEADERBOARD_SCORE_THRESHOLD) {
+                        leaderboardContainer.style.display = 'flex'; // 顯示排行榜
+                        fetchLeaderboard(); // 顯示最新排名
+                        saveScoreToLeaderboard(score); // 觸發儲存流程
+                    } else {
+                        // 未達門檻，顯示提示訊息
+                        leaderboardMessage.textContent = '離排行榜還很遠，再加把勁！';
+                    }
+                }
                 hasSavedScore = true;
             }
         }
@@ -358,8 +375,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.code === 'Space') { e.preventDefault(); handleInput(); }
     });
 
-    // *** 核心整合：遊戲啟動時，先載入一次排行榜 ***
+    // ===== 核心修改：移除初始的 fetchLeaderboard =====
     resetGame();
-    fetchLeaderboard(); 
+    // fetchLeaderboard(); // <- 移除此行，改為遊戲結束時按條件觸發
     gameLoop();
 });
