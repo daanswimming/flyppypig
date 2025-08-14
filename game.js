@@ -369,14 +369,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- 事件監聽器與遊戲啟動 ---
-    document.addEventListener('click', handleInput);
-    document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space') { e.preventDefault(); handleInput(); }
-    });
-
-    // ===== 核心修改：移除初始的 fetchLeaderboard =====
-    resetGame();
-    // fetchLeaderboard(); // <- 移除此行，改為遊戲結束時按條件觸發
-    gameLoop();
+// --- 事件監聽器與遊戲啟動 ---
+document.addEventListener('click', handleInput);
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); handleInput(); }
 });
+
+// *** 核心整合：遊戲啟動時，先載入一次排行榜 ***
+resetGame();
+fetchLeaderboard(); 
+requestAnimationFrame(gameLoop); // <- 修改點：使用 requestAnimationFrame 來安全啟動
+});
+
