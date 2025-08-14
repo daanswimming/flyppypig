@@ -12,6 +12,9 @@ body {
     color: #333;
 }
 
+/* style.css (請加入這一行) */
+#leaderboard-container { display: none; }
+
 /* 遊戲主容器 */
 .game-container {
     position: relative;
