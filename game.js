@@ -57,8 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const PIG_HEIGHT = 60;
     const BASE_FENCE_WIDTH = 52;
     const BASE_FENCE_GAP = 220;
-    const BASE_FENCE_INTERVAL = 220;
-    const PIG_TILT_ANGLE = -0.5;
+    const BASE_FENCE_INTERVAL = 320;
+    const PIG_TILT_ANGLE = -0.45;
     const PIG_TILT_DURATION = 15;
     const INITIAL_WIND_VOLUME = 0.1;
     const MAX_WIND_VOLUME = 0.8;
@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 遊戲物件: 飛天豬 ---
     pig = {
-        x: 60, y: canvas.height / 2, width: PIG_WIDTH, height: PIG_HEIGHT, velocity: 0, rotation: 0,
+        x: 25, y: canvas.height / 2, width: PIG_WIDTH, height: PIG_HEIGHT, velocity: 0, rotation: 0,
         update: function(deltaTime) {
             this.velocity += GRAVITY_PER_SECOND * deltaTime;
             this.y += this.velocity * deltaTime;
@@ -437,3 +437,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     requestAnimationFrame(gameLoop);
 });
+
