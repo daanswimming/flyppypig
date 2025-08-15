@@ -4,7 +4,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, doc, getDocs, setDoc, addDoc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ******** 請確認您自己的 firebaseConfig 物件已正確填寫 ********
 const firebaseConfig = {
     apiKey: "AIzaSyCuCzDqhwaC9Eov--IIZ6aAJMoxI8okiL0", // 請使用您自己的金鑰
     authDomain: "taro-mole-game.firebaseapp.com",
@@ -32,8 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const gameOverScreen = document.getElementById('game-over-screen');
     const finalScoreDisplay = document.getElementById('final-score');
     const leaderboardList = document.getElementById('leaderboard-list');
-    const leaderboardContainer = document.getElementById('leaderboard-container'); // 新增
-    const leaderboardMessage = document.getElementById('leaderboard-message'); // 新增
+    const leaderboardContainer = document.getElementById('leaderboard-container');
+    const leaderboardMessage = document.getElementById('leaderboard-message');
 
     // --- 音效元素取得 ---
     const flapSound = document.getElementById('flap-sound');
@@ -56,24 +55,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const backgroundScrollSpeedFactor = 0.5;
     const PIG_WIDTH = 80;
     const PIG_HEIGHT = 60;
-    const GRAVITY = 0.2;
-    const FLAP_STRENGTH = -5;
     const BASE_FENCE_WIDTH = 52;
     const BASE_FENCE_GAP = 220;
     const BASE_FENCE_INTERVAL = 220;
-    const BASE_GAME_SPEED = 4;
-    const SPEED_INCREASE_FACTOR = 0.001;
     const PIG_TILT_ANGLE = -0.5;
     const PIG_TILT_DURATION = 15;
-    const SCORE_EFFECT_DURATION = 60;
     const INITIAL_WIND_VOLUME = 0.1;
     const MAX_WIND_VOLUME = 0.8;
-    const SPEED_FOR_MAX_WIND_VOLUME = 5;
     const FLAP_SOUND_COOLDOWN = 100;
 
-    // ===== 新增功能開關 =====
-    const ENABLE_LEADERBOARD = true;      // 總開關：true = 開啟排行榜, false = 關閉
-    const LEADERBOARD_SCORE_THRESHOLD = 5; // 分數門檻：超過這個分數才會觸發排行榜
+    // --- 以「秒」為單位的常數 ---
+    const GRAVITY_PER_SECOND = 1800;
+    const FLAP_STRENGTH_PER_SECOND = -350;
+    const BASE_SPEED_PER_SECOND = 240;
+    const ACCELERATION_PER_SECOND = 12;
+    const SPEED_FOR_MAX_WIND_VOLUME = 300;
+    
+    // ===== 核心修改 1：將特效持續時間也改為以「秒」為單位 =====
+    const SCORE_EFFECT_DURATION_SECONDS = 5; // 特效持續 1.0 秒
+
+    // --- 功能開關 ---
+    const ENABLE_LEADERBOARD = true;
+    const LEADERBOARD_SCORE_THRESHOLD = 5;
 
     // --- 遊戲狀態變數 ---
     let pig, fences, score, frame, gameState;
@@ -85,12 +88,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeScoreEffects = [];
     const effectShapes = ['circle', 'star', 'triangle'];
     let currentBgIndex = 0, nextBgIndex = 0, isFading = false, fadeProgress = 0;
+    let lastTime = 0;
 
-    // --- 遊戲物件: 飛天豬 (採用穩定版的音效冷卻機制) ---
+    // --- 遊戲物件: 飛天豬 ---
     pig = {
         x: 60, y: canvas.height / 2, width: PIG_WIDTH, height: PIG_HEIGHT, velocity: 0, rotation: 0,
-        update: function() {
-            this.velocity += GRAVITY; this.y += this.velocity;
+        update: function(deltaTime) {
+            this.velocity += GRAVITY_PER_SECOND * deltaTime;
+            this.y += this.velocity * deltaTime;
             if (this.y < 0) { this.y = 0; this.velocity = 0; }
             if (pigTiltFrame > 0) { this.rotation = PIG_TILT_ANGLE; pigTiltFrame--; } 
             else { this.rotation *= 0.9; if (Math.abs(this.rotation) < 0.01) this.rotation = 0; }
@@ -102,7 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
         },
         flap: function() {
-            this.velocity = FLAP_STRENGTH; pigTiltFrame = PIG_TILT_DURATION;
+            this.velocity = FLAP_STRENGTH_PER_SECOND; 
+            pigTiltFrame = PIG_TILT_DURATION;
             if (flapSound && canPlayFlapSound) {
                 flapSound.currentTime = 0;
                 flapSound.play().catch(e => console.error("Flap sound error:", e));
@@ -112,18 +118,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- 特效物件 & 音效 & 背景管理函式 (沿用整合後的版本) ---
+    // --- 特效物件 ---
     function createScoreEffect(x, y) {
         const numEffects = Math.floor(Math.random() * 5) + 5;
         for (let i = 0; i < numEffects; i++) {
             const angle = Math.random() * 2 * Math.PI, speed = Math.random() * 2 + 1, size = Math.random() * 5 + 3, shape = effectShapes[Math.floor(Math.random() * effectShapes.length)];
-            activeScoreEffects.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2, size, shape, alpha: 1, frame: 0 });
+            activeScoreEffects.push({ 
+                x, y, 
+                vx: Math.cos(angle) * speed, 
+                vy: Math.sin(angle) * speed - 2, 
+                size, shape, alpha: 1, 
+                // ===== 核心修改 1：儲存以秒為單位的生命週期 =====
+                life: SCORE_EFFECT_DURATION_SECONDS 
+            });
         }
     }
-    function updateScoreEffects() {
+
+    // ===== 核心修改 2：整個特效更新邏輯改用 deltaTime =====
+    function updateScoreEffects(deltaTime) {
         for (let i = activeScoreEffects.length - 1; i >= 0; i--) {
-            const effect = activeScoreEffects[i]; effect.x += effect.vx; effect.y += effect.vy; effect.vy += GRAVITY * 0.4; effect.alpha = 1 - (effect.frame / SCORE_EFFECT_DURATION); effect.frame++;
-            if (effect.alpha <= 0) { activeScoreEffects.splice(i, 1); }
+            const effect = activeScoreEffects[i];
+            
+            // 速度 (vx, vy) 是基於「幀」設計的，所以乘以 60 來轉換為「秒速」的感覺
+            effect.x += effect.vx * 120 * deltaTime; 
+            effect.y += effect.vy * 120 * deltaTime;
+            
+            // 重力也基於時間
+            effect.vy += (GRAVITY_PER_SECOND * -0.001) * deltaTime;
+            
+            // 生命週期基於時間遞減
+            effect.life -= deltaTime;
+            
+            // 透明度根據剩餘生命比例計算
+            effect.alpha = Math.max(0, effect.life / SCORE_EFFECT_DURATION_SECONDS);
+            
+            // 如果生命結束，則移除
+            if (effect.life <= 0) { 
+                activeScoreEffects.splice(i, 1); 
+            }
         }
     }
     function drawScoreEffects() {
@@ -151,25 +183,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function updateWindVolume() {
         if (!windSound || !musicStarted) return;
-        const speedRange = SPEED_FOR_MAX_WIND_VOLUME - BASE_GAME_SPEED; const currentProgress = Math.max(0, currentGameSpeed - BASE_GAME_SPEED);
-        const volumeProgress = Math.min(1, currentProgress / speedRange); const newVolume = INITIAL_WIND_VOLUME + (MAX_WIND_VOLUME - INITIAL_WIND_VOLUME) * volumeProgress;
+        const speedRange = SPEED_FOR_MAX_WIND_VOLUME - BASE_SPEED_PER_SECOND; 
+        const currentProgress = Math.max(0, currentGameSpeed - BASE_SPEED_PER_SECOND);
+        const volumeProgress = Math.min(1, currentProgress / speedRange); 
+        const newVolume = INITIAL_WIND_VOLUME + (MAX_WIND_VOLUME - INITIAL_WIND_VOLUME) * volumeProgress;
         windSound.volume = Math.min(newVolume, MAX_WIND_VOLUME);
     }
     function startBackgroundFade() {
         if (isFading || backgrounds.length <= 1) return;
         isFading = true; fadeProgress = 0; nextBgIndex = (currentBgIndex + 1) % backgrounds.length;
     }
-    function updateBackground() {
-        backgroundOffsetX -= currentGameSpeed * backgroundScrollSpeedFactor;
+    function updateBackground(deltaTime) { // 接收 deltaTime
+        // ===== 核心修改 3：背景滾動乘以 deltaTime =====
+        backgroundOffsetX -= currentGameSpeed * backgroundScrollSpeedFactor * deltaTime;
+
         if (isFading) { fadeProgress += 0.01; if (fadeProgress >= 1) { fadeProgress = 0; isFading = false; currentBgIndex = nextBgIndex; } }
         const currentBg = backgrounds[currentBgIndex];
         if (typeof currentBg !== 'string' && currentBg && currentBg.width > 0) { if (Math.abs(backgroundOffsetX) > currentBg.width) { backgroundOffsetX = 0; } }
     }
 
 
-    // ===== 核心修改：排行榜相關函式 =====
+    // --- 排行榜函式 ---
     async function saveScoreToLeaderboard(currentScore) {
-        if (!ENABLE_LEADERBOARD) return; // 檢查總開關
+        if (!ENABLE_LEADERBOARD) return;
         if (currentScore <= 0) return;
 
         try {
@@ -178,11 +214,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const leaderboardDocs = querySnapshot.docs;
 
             let shouldPromptForName = false;
-            // 情況一：排行榜還沒滿10人
             if (leaderboardDocs.length < 10) {
                 shouldPromptForName = true;
             } 
-            // 情況二：排行榜已滿10人，檢查分數是否高於最低分
             else {
                 const lowestScoreOnBoard = leaderboardDocs[leaderboardDocs.length - 1].data().score;
                 if (currentScore > lowestScoreOnBoard) {
@@ -193,14 +227,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (shouldPromptForName) {
                 const playerName = prompt("恭喜上榜！請輸入你的名字：", "飛天小豬");
                 if (playerName && playerName.trim() !== "") {
-                    // 使用 addDoc 新增獨立紀錄，避免同名覆蓋
                     await addDoc(leaderboardCol, {
                         name: playerName.trim().substring(0, 10),
                         score: currentScore,
                         createdAt: new Date()
                     });
                     console.log("分數已成功儲存！");
-                    await fetchLeaderboard(); // 儲存後立即更新排行榜
+                    await fetchLeaderboard();
                 }
             } else {
                  console.log(`分數 ${currentScore} 未達上榜標準。`);
@@ -212,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchLeaderboard() {
-        if (!ENABLE_LEADERBOARD) { // 檢查總開關
+        if (!ENABLE_LEADERBOARD) {
             leaderboardContainer.style.display = 'none';
             return;
         }
@@ -243,15 +276,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- 核心遊戲邏輯 (移植自穩定版) ---
+    // --- 核心遊戲邏輯 ---
     function resetGame() {
         pig.y = canvas.height / 2; pig.velocity = 0; pig.rotation = 0;
-        fences = []; score = 0; frame = 0; currentGameSpeed = BASE_GAME_SPEED;
+        fences = []; score = 0; frame = 0; 
+        currentGameSpeed = BASE_SPEED_PER_SECOND; // 使用以秒為單位的新常數
         hasSavedScore = false; activeScoreEffects = []; pigTiltFrame = 0;
         canPlayFlapSound = true; isFading = false; currentBgIndex = 0;
         fadeProgress = 0; backgroundOffsetX = 0; stopAllSounds();
         
-        // ===== 核心修改：重設時隱藏/清理 UI =====
         if (leaderboardContainer) leaderboardContainer.style.display = 'none';
         if (leaderboardMessage) leaderboardMessage.textContent = '';
         
@@ -269,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fences.push({ x: xPos, y: gapY, width: BASE_FENCE_WIDTH, gap: BASE_FENCE_GAP, passed: false });
     }
 
-    function updateFences() {
+    function updateFences(deltaTime) { // 接收 deltaTime
         if (fences.length > 0 && fences[0].x + fences[0].width < 0) {
             fences.shift();
             const lastFence = fences[fences.length - 1];
@@ -277,7 +310,9 @@ document.addEventListener('DOMContentLoaded', () => {
             createFence(nextX);
         }
         fences.forEach(fence => {
-            fence.x -= currentGameSpeed;
+            // ===== 核心修改 3：柵欄移動乘以 deltaTime =====
+            fence.x -= currentGameSpeed * deltaTime;
+            
             if (!fence.passed && fence.x + fence.width < pig.x) {
                 score++; fence.passed = true;
                 if(scoreSound) { scoreSound.currentTime = 0; scoreSound.play().catch(e => {}); }
@@ -304,6 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof bg === 'string') { ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height); } 
             else if (bg && bg.complete && bg.width > 0) {
                 let bgX = backgroundOffsetX % bg.width;
+                if(bgX < -bg.width) bgX = 0; // 修正循環邏輯
                 ctx.drawImage(bg, bgX, 0, bg.width, canvas.height);
                 ctx.drawImage(bg, bgX + bg.width, 0, bg.width, canvas.height);
             }
@@ -323,7 +359,6 @@ document.addEventListener('DOMContentLoaded', () => {
         pig.draw(); drawScoreEffects();
     }
     
-    // ===== 核心修改：遊戲結束邏輯 =====
     function updateUI() {
         startScreen.style.display = gameState === 'start' ? 'flex' : 'none';
         gameOverScreen.style.display = gameState === 'gameOver' ? 'flex' : 'none';
@@ -333,15 +368,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gameState === 'gameOver') {
             finalScoreDisplay.textContent = score;
             if (!hasSavedScore) {
-                // 檢查總開關是否開啟
                 if (ENABLE_LEADERBOARD) {
-                    // 檢查分數是否達到門檻
                     if (score >= LEADERBOARD_SCORE_THRESHOLD) {
-                        leaderboardContainer.style.display = 'flex'; // 顯示排行榜
-                        fetchLeaderboard(); // 顯示最新排名
-                        saveScoreToLeaderboard(score); // 觸發儲存流程
+                        leaderboardContainer.style.display = 'flex';
+                        fetchLeaderboard();
+                        saveScoreToLeaderboard(score);
                     } else {
-                        // 未達門檻，顯示提示訊息
                         leaderboardMessage.textContent = '離排行榜還很遠，再加把勁！';
                     }
                 }
@@ -350,15 +382,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function gameLoop() {
+    // ===== 核心修改 4：修改主遊戲迴圈以計算 deltaTime =====
+    function gameLoop(timestamp) {
+        if (!timestamp) { // 處理第一幀沒有 timestamp 的情況
+            timestamp = 0;
+        }
+        if (lastTime === 0) {
+            lastTime = timestamp;
+        }
+        // 計算自上一幀以來經過的時間（秒），並設定上限避免因切換分頁導致 deltaTime 過大
+        const deltaTime = Math.min(0.1, (timestamp - lastTime) / 1000);
+        lastTime = timestamp;
+
         if (gameState === 'playing') {
-            currentGameSpeed += SPEED_INCREASE_FACTOR;
-            pig.update(); updateFences(); updateBackground(); updateScoreEffects(); updateWindVolume();
+            // ===== 核心修改 3：加速度乘以 deltaTime =====
+            currentGameSpeed += ACCELERATION_PER_SECOND * deltaTime;
+            
+            // 將 deltaTime 傳遞給所有需要它的更新函式
+            pig.update(deltaTime); 
+            updateFences(deltaTime); 
+            updateBackground(deltaTime); 
+            updateScoreEffects(deltaTime);
+            updateWindVolume();
+            
             if (checkCollisions()) {
-                gameState = 'gameOver'; stopAllSounds();
+                gameState = 'gameOver'; 
+                stopAllSounds();
             }
         }
-        draw(); updateUI(); requestAnimationFrame(gameLoop);
+        draw(); 
+        updateUI(); 
+        requestAnimationFrame(gameLoop); // 請求下一幀
     }
 
     function handleInput() {
@@ -369,16 +423,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-// --- 事件監聽器與遊戲啟動 ---
-document.addEventListener('click', handleInput);
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { e.preventDefault(); handleInput(); }
+    // --- 事件監聽器與遊戲啟動 ---
+    document.addEventListener('click', handleInput);
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') { e.preventDefault(); handleInput(); }
+    });
+
+    resetGame();
+    if (ENABLE_LEADERBOARD) {
+        // fetchLeaderboard(); // 移除初始的 fetchLeaderboard
+    } else {
+        if (leaderboardContainer) leaderboardContainer.style.display = 'none';
+    }
+    requestAnimationFrame(gameLoop);
 });
-
-// *** 核心整合：遊戲啟動時，先載入一次排行榜 ***
-resetGame();
-fetchLeaderboard(); 
-requestAnimationFrame(gameLoop); // <- 修改點：使用 requestAnimationFrame 來安全啟動
-});
-
-
