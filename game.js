@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const BASE_FENCE_WIDTH = 52;
     const BASE_FENCE_GAP = 220;
     const BASE_FENCE_INTERVAL = 220;
-    const BASE_GAME_SPEED = 2;
+    const BASE_GAME_SPEED = 4;
     const SPEED_INCREASE_FACTOR = 0.001;
     const PIG_TILT_ANGLE = -0.5;
     const PIG_TILT_DURATION = 15;
@@ -380,4 +380,5 @@ resetGame();
 fetchLeaderboard(); 
 requestAnimationFrame(gameLoop); // <- 修改點：使用 requestAnimationFrame 來安全啟動
 });
+
 
