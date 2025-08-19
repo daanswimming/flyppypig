@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 特效物件 ---
     function createScoreEffect(x, y) {
-        const numEffects = Math.floor(Math.random() * 5) + 5;
+        const numEffects = Math.floor(Math.random() * 1) + 1;
         for (let i = 0; i < numEffects; i++) {
             const angle = Math.random() * 2 * Math.PI, speed = Math.random() * 2 + 1, size = Math.random() * 5 + 3, shape = effectShapes[Math.floor(Math.random() * effectShapes.length)];
             activeScoreEffects.push({ 
@@ -437,4 +437,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     requestAnimationFrame(gameLoop);
 });
+
 
